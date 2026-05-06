@@ -1294,42 +1294,330 @@ const TYPES = {
   ]
 };
 
-/* ─── Scoring config ────────────────────────────────────── */
-/* Each question maps its answer to an attachment score.
-   Scoring key per type:
-   stable  → Q that is "stable": score = answer value directly
-             Q that is other type: 0 (not direct)
-   We use separate arrays per dimension.
-   Dimension indices for female[0..19] and male[0..19]:
-   type field on each Q = 'stable'|'anxious'|'avoidant'|'fearful'
-*/
+/* ─── Scoring config ─────────────────────────────────────
+  핵심 설계:
+  1. 질문별 가중치 차등 (핵심 질문 ×2, 보조 질문 ×1)
+  2. 4개 차원 점수를 0~100으로 정규화
+  3. 유형 친화도: 차원 점수 + 개별 답변 패턴 직접 체크
+     → 같은 애착 차원 안에서도 12가지 유형이 변별됨
+─────────────────────────────────────────────────────── */
+
 function computeScores(answers, gender) {
   const qs = QUESTIONS[gender];
-  let s = { stable: 0, anxious: 0, avoidant: 0, fearful: 0 };
-  answers.forEach((val, i) => {
-    if (val === null) return;
-    s[qs[i].type] += val;
+  const W = {
+    female: [2,2,2,2,1,1,2,1,2,2,1,1,1,2,1,2,2,1,2,1],
+    male:   [2,2,2,1,1,1,2,2,2,2,1,2,1,2,1,2,2,1,1,2],
+  }[gender];
+
+  let raw = { stable:0, anxious:0, avoidant:0, fearful:0 };
+  let maxRaw = { stable:0, anxious:0, avoidant:0, fearful:0 };
+
+  qs.forEach((q, i) => {
+    const v = answers[i] ?? 3;
+    raw[q.type]    += v * W[i];
+    maxRaw[q.type] += 5 * W[i];
   });
-  return s;
+
+  const norm = {};
+  Object.keys(raw).forEach(k => {
+    norm[k] = maxRaw[k] > 0 ? Math.round((raw[k] / maxRaw[k]) * 100) : 50;
+  });
+  return norm;
 }
+
+const TYPE_AFFINITY = {
+  // ══ 여성 ════════════════════════════════════════════
+
+  // f1 든든한 소나무 (안정형 - 신뢰·포용)
+  f1: (n, a) => {
+    let s = n.stable * 1.8 - n.anxious * 0.8 - n.fearful * 0.7;
+    if (a[1] >= 4) s += 15;   // 감정 표현 편안
+    if (a[11] >= 4) s += 10;  // 극복 확신
+    if (a[15] >= 4) s += 10;  // 혼자도 행복
+    if (a[0] <= 2) s += 8;    // 연락 걱정 낮음
+    if (a[16] <= 2) s += 8;   // 확인 욕구 낮음
+    return s;
+  },
+
+  // f2 햇살 같은 에너지 (안정형 - 긍정·활력)
+  f2: (n, a) => {
+    let s = n.stable * 1.6 - n.fearful * 0.9 - n.anxious * 0.5;
+    if (a[5] >= 4) s += 12;   // 의지 자연스러움
+    if (a[15] >= 4) s += 12;  // 혼자도 행복
+    if (a[0] <= 2 && a[8] <= 2) s += 15;  // 불안 질문 낮음
+    if (n.avoidant > 60) s -= 15;
+    return s;
+  },
+
+  // f3 사랑 확인꾼 (불안형 - 확인 행동·연락 집착)
+  f3: (n, a) => {
+    let s = n.anxious * 1.8 - n.avoidant * 0.8;
+    if (a[0] >= 4) s += 20;   // 연락 늦으면 걱정
+    if (a[8] >= 4) s += 15;   // 말투 변화 신경
+    if (a[16] >= 4) s += 20;  // 사랑 확인 욕구
+    if (a[10] >= 4) s += 10;  // 일상 알아야 안심
+    if (n.avoidant < 40) s += 10;
+    return s;
+  },
+
+  // f4 섬세한 유리심장 (불안형 - 감수성·상처 민감)
+  f4: (n, a) => {
+    let s = n.anxious * 1.5 + n.fearful * 0.5 - n.avoidant * 0.5;
+    if (a[8] >= 4) s += 15;   // 말투 변화 신경
+    if (a[6] >= 3) s += 10;   // 실망시킬 것 생각
+    if (a[13] >= 4) s += 10;  // 사과 전 버팀
+    if (a[16] <= 3) s += 8;   // 확인 욕구가 f3보다 낮음
+    if (a[1] <= 3) s += 8;    // 감정 표현 약간 서툼
+    return s;
+  },
+
+  // f5 차가운 얼음공주 (회피형 - 공간·독립 절대적)
+  f5: (n, a) => {
+    let s = n.avoidant * 1.8 - n.anxious * 0.9 - n.fearful * 0.4;
+    if (a[2] >= 4) s += 20;   // 가까워지면 구속감
+    if (a[7] >= 4) s += 12;   // 사생활 침해 싫음
+    if (a[12] >= 4) s += 12;  // 의존하면 도망
+    if (a[17] >= 4) s += 10;  // 깊은 대화 어색
+    if (a[0] <= 2) s += 10;   // 연락 걱정 낮음
+    return s;
+  },
+
+  // f6 독립적인 커리어우먼 (회피형 - 자기계발·균형)
+  f6: (n, a) => {
+    let s = n.avoidant * 1.4 + n.stable * 0.5 - n.anxious * 0.7;
+    if (a[4] >= 3) s += 10;   // 갈등 시 회피
+    if (a[12] >= 3) s += 12;  // 의존 부담
+    if (a[15] >= 4) s += 15;  // 혼자도 충분히 행복
+    if (a[5] >= 3) s += 8;    // 의지 어느 정도 가능
+    if (a[14] <= 2) s += 10;  // 연인 우선순위 낮음
+    return s;
+  },
+
+  // f7 비밀 많은 숲 (공포회피형 - 접근-회피 갈등)
+  f7: (n, a) => {
+    let s = n.fearful * 1.8 + n.avoidant * 0.3 - n.stable * 0.6;
+    if (a[9] >= 4) s += 25;   // 다가오면 밀어냄
+    if (a[18] >= 4) s += 25;  // 공포로 벽 침
+    if (a[6] >= 4) s += 12;   // 실망시킬 것 생각
+    if (a[1] <= 2 && a[11] <= 2) s += 10;
+    return s;
+  },
+
+  // f8 츤데레 여왕님 (회피+안정 - 내 사람에게만 헌신)
+  f8: (n, a) => {
+    const balance = 100 - Math.abs(n.avoidant - n.stable);
+    let s = balance * 0.8 + (n.avoidant + n.stable) * 0.3 - n.anxious * 0.6 - n.fearful * 0.5;
+    if (a[2] >= 3) s += 8;
+    if (a[1] >= 3) s += 8;
+    if (a[11] >= 3) s += 8;
+    if (a[13] >= 3 && a[13] <= 4) s += 10;  // 사과 전 버팀 중간
+    return s;
+  },
+
+  // f9 불꽃 같은 열정녀 (불안+안정 - 전력 질주형)
+  f9: (n, a) => {
+    const blend = (n.anxious + n.stable) / 2;
+    let s = blend * 1.4 - n.avoidant * 0.7 - n.fearful * 0.4;
+    if (a[3] >= 4) s += 15;   // 떠날까봐 집착
+    if (a[14] >= 4) s += 12;  // 연인 우선순위
+    if (a[16] >= 3) s += 10;  // 확인 욕구 중간 이상
+    if (a[11] >= 4) s += 10;  // 극복 확신
+    if (n.avoidant < 35) s += 12;
+    return s;
+  },
+
+  // f10 평화주의 중재자 (안정+회피 - 갈등 회피·이성적)
+  f10: (n, a) => {
+    let s = n.stable * 1.0 + n.avoidant * 0.7 - n.anxious * 0.6 - n.fearful * 0.5;
+    if (a[4] >= 3) s += 12;   // 갈등 시 회피
+    if (a[1] >= 3) s += 10;   // 감정 표현 어느 정도
+    if (a[11] >= 4) s += 10;  // 극복 확신
+    if (a[0] <= 2) s += 10;   // 연락 걱정 낮음
+    if (a[8] <= 2) s += 10;   // 말투 변화 신경 낮음
+    return s;
+  },
+
+  // f11 감성적인 예술가 (공포회피형 - 감정 기복·감수성)
+  f11: (n, a) => {
+    let s = n.fearful * 1.5 + n.anxious * 0.5 - n.stable * 0.5;
+    if (a[19] >= 4) s += 20;  // 감정 기복 심함
+    if (a[9] >= 3) s += 12;   // 다가오면 밀어냄
+    if (a[6] >= 3) s += 10;   // 실망 생각
+    if (a[1] <= 2) s += 8;    // 감정 표현 서툼
+    return s;
+  },
+
+  // f12 완벽주의 멘토 (안정+강박 - 책임감·성장 지향)
+  f12: (n, a) => {
+    let s = n.stable * 1.3 + n.anxious * 0.3 - n.avoidant * 0.4 - n.fearful * 0.3;
+    if (a[1] >= 4) s += 12;   // 감정 표현 편안
+    if (a[11] >= 4) s += 15;  // 극복 확신
+    if (a[14] >= 3) s += 8;   // 연인 우선순위
+    if (a[15] >= 3) s += 8;   // 혼자도 행복
+    if (a[5] >= 3) s += 8;    // 의지 자연스러움
+    return s;
+  },
+
+  // ══ 남성 ════════════════════════════════════════════
+
+  // m1 따뜻한 리더 (안정형 - 보호·지지)
+  m1: (n, a) => {
+    let s = n.stable * 1.8 - n.anxious * 0.6 - n.fearful * 0.6;
+    if (a[0] >= 4) s += 15;   // 감정 유대 중요
+    if (a[4] >= 4) s += 12;   // 자신감·주도적
+    if (a[12] >= 4) s += 12;  // 믿음직
+    if (a[1] <= 2) s += 10;   // 숨막힘 낮음
+    if (a[7] <= 2) s += 8;    // 버림받을 생각 낮음
+    return s;
+  },
+
+  // m2 다정한 대형견 (안정형 - 애정표현·배려)
+  m2: (n, a) => {
+    let s = n.stable * 1.6 - n.avoidant * 0.6 - n.fearful * 0.4;
+    if (a[0] >= 4) s += 12;   // 감정 유대 중요
+    if (a[12] >= 4) s += 12;  // 믿음직
+    if (a[15] >= 3) s += 10;  // 독립적이지만 연애 중요
+    if (a[1] <= 2) s += 10;   // 숨막힘 낮음
+    if (a[6] <= 2) s += 8;    // 거리 편함 낮음
+    if (n.avoidant < 35) s += 12;
+    return s;
+  },
+
+  // m3 걱정 많은 해바라기 (불안형 - 확인·집착)
+  m3: (n, a) => {
+    let s = n.anxious * 1.8 - n.avoidant * 0.7;
+    if (a[2] >= 4) s += 20;   // 기분 안좋으면 나 때문
+    if (a[7] >= 4) s += 15;   // 버림받을 생각
+    if (a[9] >= 4) s += 20;   // 연락 안되면 불안
+    if (a[14] >= 3) s += 10;  // 만족 못시킬까
+    if (n.avoidant < 40) s += 10;
+    return s;
+  },
+
+  // m4 인정 욕구 끝판왕 (불안형 - 인정·칭찬)
+  m4: (n, a) => {
+    let s = n.anxious * 1.5 + n.stable * 0.3 - n.fearful * 0.4;
+    if (a[2] >= 3) s += 10;   // 기분 나쁘면 나 때문
+    if (a[14] >= 3) s += 12;  // 만족 못시킬까
+    if (a[4] >= 3) s += 12;   // 자신감·주도
+    if (a[17] >= 3) s += 15;  // 질투 유발 (확인 욕구)
+    if (a[9] >= 3 && a[9] <= 4) s += 8;
+    return s;
+  },
+
+  // m5 고독한 늑대 (회피형 - 독립·자유 절대적)
+  m5: (n, a) => {
+    let s = n.avoidant * 1.8 - n.anxious * 0.8;
+    if (a[1] >= 4) s += 18;   // 요구 많으면 숨막힘
+    if (a[6] >= 4) s += 18;   // 거리 편함
+    if (a[10] >= 4) s += 12;  // 연애가 자유 제한
+    if (a[8] >= 4) s += 10;   // 속마음 어려움
+    if (a[7] <= 2) s += 8;    // 버림받을 생각 낮음
+    if (a[2] <= 2) s += 8;    // 불안 낮음
+    return s;
+  },
+
+  // m6 차가운 도시 남자 (회피형 - 논리·이성)
+  m6: (n, a) => {
+    let s = n.avoidant * 1.5 + n.stable * 0.2 - n.anxious * 0.6;
+    if (a[18] >= 4) s += 18;  // 비논리적이면 대화 중단
+    if (a[8] >= 3) s += 12;   // 속마음 어려움
+    if (a[6] >= 3) s += 10;   // 거리 편함
+    if (a[5] >= 3) s += 10;   // 구속 안하면 가능
+    if (a[2] <= 2) s += 10;   // 불안 낮음
+    if (a[9] <= 2) s += 8;
+    return s;
+  },
+
+  // m7 상처 입은 방랑자 (공포회피형 - 접근-회피 갈등)
+  m7: (n, a) => {
+    let s = n.fearful * 1.8 + n.avoidant * 0.3 - n.stable * 0.5;
+    if (a[11] >= 4) s += 20;  // 단점 보이면 급격히 식음
+    if (a[16] >= 4) s += 20;  // 마음 안 열고 간봄
+    if (a[13] >= 3) s += 12;  // 방어적
+    if (a[19] >= 4) s += 12;  // 가벼운 만남 편함
+    if (a[0] <= 2) s += 8;    // 감정 유대 낮음
+    return s;
+  },
+
+  // m8 듬직한 바위 (안정+회피 - 행동으로 보여줌)
+  m8: (n, a) => {
+    const balance = 100 - Math.abs(n.avoidant - n.stable);
+    let s = balance * 0.7 + (n.avoidant + n.stable) * 0.3 - n.anxious * 0.5 - n.fearful * 0.4;
+    if (a[12] >= 3) s += 10;  // 믿음직
+    if (a[15] >= 4) s += 12;  // 독립적
+    if (a[0] >= 3) s += 8;    // 감정 유대 어느 정도
+    if (a[2] <= 2) s += 8;    // 불안 낮음
+    if (a[9] <= 2) s += 8;
+    return s;
+  },
+
+  // m9 유쾌한 분위기 메이커 (안정형 - 즐거움·유머)
+  m9: (n, a) => {
+    let s = n.stable * 1.6 - n.fearful * 0.6 - n.anxious * 0.4;
+    if (a[4] >= 4) s += 15;   // 자신감·주도적
+    if (a[0] >= 3) s += 10;   // 감정 유대 중요
+    if (a[15] >= 3) s += 10;  // 독립적
+    if (a[11] <= 2) s += 10;  // 단점에 마음 식음 낮음
+    if (a[16] <= 2) s += 10;  // 간보기 낮음
+    if (n.fearful < 35) s += 12;
+    return s;
+  },
+
+  // m10 철벽 치는 수호자 (회피+안정 - 내 사람에게만 열림)
+  m10: (n, a) => {
+    const balance = 100 - Math.abs(n.avoidant - n.stable);
+    let s = balance * 0.7 + (n.avoidant + n.stable) * 0.35 + n.fearful * 0.15 - n.anxious * 0.5;
+    if (a[8] >= 3) s += 10;   // 속마음 어려움
+    if (a[6] >= 3) s += 10;   // 거리 편함
+    if (a[12] >= 3) s += 8;   // 믿음직
+    if (a[5] >= 3) s += 8;    // 구속 안하면 가능
+    if (a[2] <= 2) s += 8;
+    if (a[9] <= 2) s += 8;
+    return s;
+  },
+
+  // m11 섬세한 로맨티스트 (불안+안정 - 세심한 로맨스)
+  m11: (n, a) => {
+    const blend = (n.anxious + n.stable) / 2;
+    let s = blend * 1.4 - n.avoidant * 0.6 - n.fearful * 0.3;
+    if (a[0] >= 3) s += 10;   // 감정 유대 중요
+    if (a[12] >= 3) s += 10;  // 믿음직
+    if (a[14] >= 3) s += 12;  // 만족 못시킬까
+    if (a[2] >= 3) s += 10;   // 기분 나쁘면 나 때문
+    if (n.avoidant < 40) s += 10;
+    return s;
+  },
+
+  // m12 철저한 전략가 (공포회피형 - 주도권·계산적)
+  m12: (n, a) => {
+    let s = n.fearful * 1.6 + n.avoidant * 0.2 - n.stable * 0.6;
+    if (a[16] >= 4) s += 20;  // 마음 안 열고 간봄
+    if (a[13] >= 4) s += 15;  // 방어적
+    if (a[11] >= 4) s += 15;  // 단점 보이면 식음
+    if (a[19] >= 3) s += 12;  // 가벼운 만남 편함
+    if (a[0] <= 2) s += 10;   // 감정 유대 낮음
+    return s;
+  },
+};
 
 function pickType(scores, gender) {
   const types = TYPES[gender];
-  // Find best matching type by condition, fall back to highest matching score
-  const matched = types.filter(t => t.condition(scores));
-  if (matched.length > 0) {
-    // Among matched, pick one whose base attachment has highest score
-    return matched[0];
-  }
-  // Fallback: dominant attachment
-  const dominant = Object.entries(scores).sort((a,b) => b[1]-a[1])[0][0];
-  const fallback = {
-    stable: gender === 'female' ? 'f1' : 'm1',
-    anxious: gender === 'female' ? 'f3' : 'm3',
-    avoidant: gender === 'female' ? 'f5' : 'm5',
-    fearful: gender === 'female' ? 'f7' : 'm7',
-  };
-  return types.find(t => t.id === fallback[dominant]) || types[0];
+  const answers = state.answers.map(v => v ?? 3);
+
+  let bestType = types[0];
+  let bestScore = -Infinity;
+
+  types.forEach(t => {
+    const fn = TYPE_AFFINITY[t.id];
+    const affinity = fn ? fn(scores, answers) : 0;
+    if (affinity > bestScore) {
+      bestScore = affinity;
+      bestType = t;
+    }
+  });
+
+  return bestType;
 }
 
 /* ─── Navigation helpers ────────────────────────────────── */
@@ -1442,14 +1730,13 @@ function renderResult(type, scores) {
   document.getElementById('result-attachment-label').textContent = `[ ${type.attachment} ]`;
   document.getElementById('result-quote').textContent = type.quote;
 
-  // Score chart
-  const maxPossible = 5 * 5; // 5 qs * 5 max
+  // Score chart (이미 0~100 정규화된 값)
+  const maxPossible = 100;
   const scoreLabels = { stable: '안정형', anxious: '불안형', avoidant: '회피형', fearful: '공포회피형' };
   const barClass = { stable: 'bar-stable', anxious: 'bar-anxious', avoidant: 'bar-avoidant', fearful: 'bar-fearful' };
   const chart = document.getElementById('score-chart');
   chart.innerHTML = '';
   Object.entries(scores).forEach(([key, val]) => {
-    const pct = Math.round((val / maxPossible) * 100);
     chart.innerHTML += `
       <div class="score-item">
         <div class="score-label">
@@ -1457,7 +1744,7 @@ function renderResult(type, scores) {
           <span>${val}점</span>
         </div>
         <div class="score-track">
-          <div class="score-bar ${barClass[key]}" style="width:0%" data-target="${pct}%"></div>
+          <div class="score-bar ${barClass[key]}" style="width:0%" data-target="${val}%"></div>
         </div>
       </div>`;
   });
@@ -1521,12 +1808,11 @@ function renderResult(type, scores) {
   const scoreLabelsImg = { stable: '안정형', anxious: '불안형', avoidant: '회피형', fearful: '공포회피형' };
   const barClassImg = { stable: 'bar-stable', anxious: 'bar-anxious', avoidant: 'bar-avoidant', fearful: 'bar-fearful' };
   Object.entries(scores).forEach(([key, val]) => {
-    const pct = Math.round((val / 25) * 100);
     imgScores.innerHTML += `
       <div>
         <div class="img-card-score-label"><span>${scoreLabelsImg[key]}</span><span>${val}점</span></div>
         <div class="img-card-score-track">
-          <div class="img-card-score-bar ${barClassImg[key]}" style="width:${pct}%"></div>
+          <div class="img-card-score-bar ${barClassImg[key]}" style="width:${val}%"></div>
         </div>
       </div>`;
   });
