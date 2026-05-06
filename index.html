@@ -10,6 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
   <style>
     /* ─── CSS Variables ─────────────────────────────── */
@@ -618,6 +619,139 @@
     }
     .btn-share:hover { background: #4a3530; transform: translateY(-2px); }
 
+    .btn-save {
+      background: linear-gradient(135deg, var(--gold), #a07840);
+      color: #fff;
+      padding: 14px 28px;
+      font-size: .9rem;
+      border-radius: 50px;
+      font-weight: 700;
+      border: none;
+      cursor: pointer;
+      transition: var(--trans);
+      box-shadow: 0 4px 16px rgba(200,169,110,.35);
+    }
+    .btn-save:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(200,169,110,.45); }
+    .btn-save:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+
+    /* ─── 이미지 저장용 카드 (화면에 안 보이고 캡처만) ── */
+    #result-image-card {
+      position: fixed;
+      left: -9999px; top: 0;
+      width: 600px;
+      background: var(--cream);
+      font-family: var(--f-body);
+      padding: 0;
+      border-radius: 28px;
+      overflow: hidden;
+    }
+    .img-card-top {
+      background: linear-gradient(145deg, #f5e6d0 0%, #edd5bc 50%, #e4c5a8 100%);
+      padding: 48px 40px 36px;
+      text-align: center;
+      position: relative;
+    }
+    .img-card-top::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,.5) 0%, transparent 70%);
+    }
+    .img-card-site {
+      font-size: .72rem; font-weight: 700; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--rose);
+      margin-bottom: 20px; position: relative;
+    }
+    .img-card-emoji {
+      font-size: 4.5rem; line-height: 1;
+      margin-bottom: 16px; display: block; position: relative;
+    }
+    .img-card-name {
+      font-family: var(--f-display);
+      font-size: 2rem; font-weight: 700;
+      color: var(--charcoal); margin-bottom: 6px; position: relative;
+    }
+    .img-card-attach {
+      font-size: .82rem; color: var(--muted);
+      margin-bottom: 20px; position: relative;
+    }
+    .img-card-quote {
+      font-family: var(--f-display);
+      font-size: .95rem; font-style: italic;
+      color: var(--rose); position: relative;
+      background: rgba(255,255,255,.55);
+      border-radius: 12px; padding: 12px 20px;
+      display: inline-block; max-width: 440px;
+    }
+    .img-card-body {
+      background: #fff;
+      padding: 32px 40px 36px;
+    }
+    .img-card-section-title {
+      font-size: .7rem; font-weight: 700;
+      letter-spacing: .12em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .img-card-section-title::before {
+      content: ''; display: inline-block;
+      width: 3px; height: 14px;
+      background: var(--rose); border-radius: 2px;
+    }
+    .img-card-summary {
+      font-size: .88rem; line-height: 1.8;
+      color: #3d2e2c; margin-bottom: 24px;
+    }
+    .img-card-scores {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; margin-bottom: 24px;
+    }
+    .img-card-score-label {
+      display: flex; justify-content: space-between;
+      font-size: .72rem; font-weight: 700; color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .img-card-score-track {
+      height: 7px; background: var(--warm);
+      border-radius: 99px; overflow: hidden;
+    }
+    .img-card-score-bar {
+      height: 100%; border-radius: 99px;
+    }
+    .img-card-compat {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-bottom: 24px;
+    }
+    .img-card-compat-item {
+      border-radius: 10px; padding: 12px 14px;
+    }
+    .img-card-compat-item.good {
+      background: #edfaf2; border: 1.5px solid #a8dfb8;
+    }
+    .img-card-compat-item.bad {
+      background: #fdecea; border: 1.5px solid #f0b8b2;
+    }
+    .img-card-compat-header {
+      font-size: .68rem; font-weight: 700;
+      letter-spacing: .06em; margin-bottom: 4px;
+    }
+    .img-card-compat-item.good .img-card-compat-header { color: #2d7a4a; }
+    .img-card-compat-item.bad  .img-card-compat-header { color: #9a2f28; }
+    .img-card-compat-name {
+      font-size: .88rem; font-weight: 700; color: var(--charcoal);
+    }
+    .img-card-footer {
+      background: linear-gradient(135deg, var(--rose), var(--deep));
+      padding: 16px 40px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .img-card-footer-text {
+      font-size: .78rem; color: rgba(255,255,255,.85); font-weight: 500;
+    }
+    .img-card-footer-url {
+      font-size: .75rem; color: rgba(255,255,255,.7);
+      font-weight: 700; letter-spacing: .04em;
+    }
+
     /* ─── Toast ──────────────────────────────────────── */
     .toast {
       position: fixed;
@@ -798,12 +932,36 @@
     <!-- Actions -->
     <div class="result-actions">
       <button class="btn-share" onclick="copyShare()">🔗 결과 공유하기</button>
+      <button class="btn-save" id="btn-save-img" onclick="saveImage()">📸 이미지로 저장</button>
       <button class="btn btn-ghost" onclick="retryQuiz()">↩ 다시 테스트하기</button>
     </div>
 
   </section>
 
 </div><!-- /app -->
+
+<!-- ═══ 이미지 캡처용 카드 (화면 밖에 숨겨둠) ════════════ -->
+<div id="result-image-card">
+  <div class="img-card-top">
+    <div class="img-card-site">💌 나의 연애 유형 테스트</div>
+    <span class="img-card-emoji" id="img-emoji"></span>
+    <div class="img-card-name" id="img-name"></div>
+    <div class="img-card-attach" id="img-attach"></div>
+    <div class="img-card-quote" id="img-quote"></div>
+  </div>
+  <div class="img-card-body">
+    <div class="img-card-section-title">성향 요약</div>
+    <div class="img-card-summary" id="img-summary"></div>
+    <div class="img-card-section-title">애착 유형 점수</div>
+    <div class="img-card-scores" id="img-scores"></div>
+    <div class="img-card-section-title">궁합 유형</div>
+    <div class="img-card-compat" id="img-compat"></div>
+  </div>
+  <div class="img-card-footer">
+    <div class="img-card-footer-text" id="img-footer-name"></div>
+    <div class="img-card-footer-url">love-type-quiz.vercel.app</div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -1270,6 +1428,8 @@ function finishQuiz() {
     clearInterval(interval);
     const scores = computeScores(state.answers, state.gender);
     const type = pickType(scores, state.gender);
+    state.resultTypeId = type.id;
+    state.lastScores = scores;
     renderResult(type, scores);
     showScreen('result');
   }, 2800);
@@ -1348,6 +1508,48 @@ function renderResult(type, scores) {
         <div class="compat-reason">${c.reason}</div>
       </div>`;
   });
+
+  // ── 이미지 저장용 카드 채우기 ──────────────────────────
+  document.getElementById('img-emoji').textContent   = type.emoji;
+  document.getElementById('img-name').textContent    = type.name;
+  document.getElementById('img-attach').textContent  = `[ ${type.attachment} ]`;
+  document.getElementById('img-quote').textContent   = type.quote;
+  document.getElementById('img-summary').textContent = type.summary.slice(0, 120) + (type.summary.length > 120 ? '...' : '');
+  document.getElementById('img-footer-name').textContent = `${state.nickname}님의 연애 유형 결과`;
+
+  // 점수 차트
+  const imgScores = document.getElementById('img-scores');
+  imgScores.innerHTML = '';
+  const scoreLabelsImg = { stable: '안정형', anxious: '불안형', avoidant: '회피형', fearful: '공포회피형' };
+  const barClassImg = { stable: 'bar-stable', anxious: 'bar-anxious', avoidant: 'bar-avoidant', fearful: 'bar-fearful' };
+  Object.entries(scores).forEach(([key, val]) => {
+    const pct = Math.round((val / 25) * 100);
+    imgScores.innerHTML += `
+      <div>
+        <div class="img-card-score-label"><span>${scoreLabelsImg[key]}</span><span>${val}점</span></div>
+        <div class="img-card-score-track">
+          <div class="img-card-score-bar ${barClassImg[key]}" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+  });
+
+  // 궁합
+  const imgCompat = document.getElementById('img-compat');
+  imgCompat.innerHTML = '';
+  type.goodCompat.slice(0, 1).forEach(c => {
+    imgCompat.innerHTML += `
+      <div class="img-card-compat-item good">
+        <div class="img-card-compat-header">💚 찰떡 궁합</div>
+        <div class="img-card-compat-name">${c.name}</div>
+      </div>`;
+  });
+  type.badCompat.slice(0, 1).forEach(c => {
+    imgCompat.innerHTML += `
+      <div class="img-card-compat-item bad">
+        <div class="img-card-compat-header">⚠️ 조심할 궁합</div>
+        <div class="img-card-compat-name">${c.name}</div>
+      </div>`;
+  });
 }
 
 function retryQuiz() {
@@ -1355,11 +1557,19 @@ function retryQuiz() {
   document.getElementById('input-nickname').value = '';
   document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('selected'));
   document.getElementById('start-btn').disabled = true;
+  // URL 파라미터 제거
+  history.replaceState(null, '', window.location.pathname);
   showScreen('intro');
 }
 
 function copyShare() {
-  const url = window.location.href;
+  // 현재 결과를 URL 파라미터로 인코딩해서 공유
+  const params = new URLSearchParams({
+    name: state.nickname,
+    type: state.resultTypeId,
+    s: JSON.stringify(state.lastScores)
+  });
+  const url = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
   if (navigator.clipboard) {
     navigator.clipboard.writeText(url).then(() => showToast('링크가 복사되었어요! 친구에게 공유해보세요 💌'));
   } else {
@@ -1373,12 +1583,90 @@ function copyShare() {
   }
 }
 
+async function saveImage() {
+  const btn = document.getElementById('btn-save-img');
+  btn.disabled = true;
+  btn.textContent = '⏳ 이미지 생성 중...';
+
+  try {
+    const card = document.getElementById('result-image-card');
+    // 잠깐 visible로 만들어 렌더링 후 캡처
+    card.style.left = '-9999px';
+    card.style.visibility = 'visible';
+
+    await new Promise(r => setTimeout(r, 200)); // 렌더 대기
+
+    const canvas = await html2canvas(card, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: null,
+      logging: false,
+    });
+
+    card.style.visibility = 'hidden';
+
+    const link = document.createElement('a');
+    link.download = `${state.nickname || '나'}_연애유형_${state.resultTypeId || 'result'}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+
+    showToast('이미지가 저장되었어요! 📸');
+  } catch(e) {
+    showToast('이미지 저장에 실패했어요. 다시 시도해주세요.');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '📸 이미지로 저장';
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 3000);
 }
+
+/* ─── URL 파라미터로 결과 바로 표시 ─────────────────────── */
+(function checkSharedResult() {
+  const params = new URLSearchParams(window.location.search);
+  const sharedName = params.get('name');
+  const sharedTypeId = params.get('type');
+  const sharedScores = params.get('s');
+
+  if (!sharedName || !sharedTypeId) return;
+
+  // 공유된 링크로 접근한 경우: 바로 결과 화면으로
+  const gender = sharedTypeId.startsWith('f') ? 'female' : 'male';
+  const type = TYPES[gender].find(t => t.id === sharedTypeId);
+  if (!type) return;
+
+  let scores = { stable: 15, anxious: 10, avoidant: 10, fearful: 5 }; // 기본값
+  try { scores = JSON.parse(sharedScores); } catch(e) {}
+
+  state.nickname = sharedName;
+  state.gender = gender;
+  state.resultTypeId = sharedTypeId;
+  state.lastScores = scores;
+
+  // 공유 배너 표시용 플래그
+  state.isSharedView = true;
+
+  renderResult(type, scores);
+  showScreen('result');
+
+  // 상단에 "공유된 결과입니다" 배너 추가
+  const banner = document.createElement('div');
+  banner.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: linear-gradient(135deg, #c9816a, #8b3a2f);
+    color: white; text-align: center;
+    padding: 12px 20px; font-size: .88rem; font-weight: 600;
+    font-family: 'Noto Sans KR', sans-serif;
+  `;
+  banner.innerHTML = `💌 <strong>${sharedName}</strong>님이 공유한 결과예요! &nbsp;
+    <span onclick="retryQuiz()" style="cursor:pointer;text-decoration:underline;opacity:.85;">나도 테스트하기 →</span>`;
+  document.body.prepend(banner);
+})();
 </script>
 </body>
 </html>
