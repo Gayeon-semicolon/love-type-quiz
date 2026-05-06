@@ -802,12 +802,10 @@
           <button class="gender-btn" data-gender="female" onclick="selectGender(this)">
             <span class="g-emoji">🌸</span>
             <span class="g-label">여성</span>
-            <span class="g-desc">여성용 질문</span>
           </button>
           <button class="gender-btn" data-gender="male" onclick="selectGender(this)">
             <span class="g-emoji">🌊</span>
             <span class="g-label">남성</span>
-            <span class="g-desc">남성용 질문</span>
           </button>
         </div>
       </div>
@@ -1559,6 +1557,9 @@ function retryQuiz() {
   document.getElementById('start-btn').disabled = true;
   // URL 파라미터 제거
   history.replaceState(null, '', window.location.pathname);
+  // 공유 배너 제거
+  const banner = document.querySelector('body > div[style*="position: fixed"]');
+  if (banner) banner.remove();
   showScreen('intro');
 }
 
